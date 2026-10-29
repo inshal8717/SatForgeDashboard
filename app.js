@@ -286,11 +286,45 @@ function gauge(svgId, v, min, max, color, bands) {
   document.getElementById(svgId).innerHTML = s;
 }
 
-/* Globe and orbit: simulated, drawn each animation frame. */
+/* ---- Globe: dot-matrix Earth, simulated orbit ---- */
 const gcv = document.getElementById("globe");
 const gctx = gcv.getContext("2d");
-const UAE = { lat: 25.2, lon: 55.3 };
-const INC = 51 * Math.PI / 180;
+const UAE = { lat: 25.2 * Math.PI / 180, lon: 55.3 * Math.PI / 180 };
+const INC = 51 * Math.PI / 180;        // decorative orbit ring; inclination not decided (see handover)
+const TILT = 20 * Math.PI / 180;       // view tilt so the north pole shows
+const SPIN = 0.000012;                 // view rotation, radians per ms (visual only)
+
+/* Land dots: an even (Fibonacci) spread of points over the sphere, kept where the 1-degree mask says land. */
+const LAND_DOTS = (() => {
+  const bytes = Uint8Array.from(atob(LAND.b64), ch => ch.charCodeAt(0));
+  const isLand = (latDeg, lonDeg) => {
+    const row = Math.min(LAND.h - 1, Math.max(0, Math.floor(90 - latDeg)));
+    const col = Math.min(LAND.w - 1, Math.max(0, Math.floor(lonDeg + 180)));
+    const i = row * LAND.w + col;
+    return (bytes[i >> 3] >> (7 - (i & 7))) & 1;
+  };
+  const dots = [], n = 5200, golden = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), th = golden * i;
+    const lat = Math.asin(y), lon = Math.atan2(Math.sin(th) * r, Math.cos(th) * r);
+    if (!isLand(lat * 180 / Math.PI, lon * 180 / Math.PI)) continue;
+    const cl = Math.cos(lat);
+    dots.push({ lon, cl, sl: Math.sin(lat), nx: cl * Math.cos(lon), ny: cl * Math.sin(lon), nz: Math.sin(lat) });
+  }
+  return dots;
+})();
+
+/* Where the sun is overhead right now (approximate: declination plus equation of time). */
+function subsolar(date) {
+  const day = (date - Date.UTC(date.getUTCFullYear(), 0, 0)) / 864e5;
+  const decl = -23.44 * Math.PI / 180 * Math.cos(2 * Math.PI / 365 * (day + 10));
+  const hours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  const B = 2 * Math.PI * (day - 81) / 364;
+  const eotMin = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+  const lon = -(hours - 12 + eotMin / 60) * 15 * Math.PI / 180;
+  return { nx: Math.cos(decl) * Math.cos(lon), ny: Math.cos(decl) * Math.sin(lon), nz: Math.sin(decl) };
+}
+const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 function drawGlobe(now) {
   const dpr = window.devicePixelRatio || 1;
@@ -301,69 +335,88 @@ function drawGlobe(now) {
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
   const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.4;
-  const rot = now * 0.00004;
+  const rot = now * SPIN;
+  const cT = Math.cos(TILT), sT = Math.sin(TILT);
+  const sun = subsolar(new Date());
 
-  const atm = g.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.25);
-  atm.addColorStop(0, "rgba(95,211,224,0.22)"); atm.addColorStop(1, "rgba(95,211,224,0)");
-  g.fillStyle = atm; g.beginPath(); g.arc(cx, cy, R * 1.25, 0, Math.PI * 2); g.fill();
-  const body = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R);
-  body.addColorStop(0, "#14303b"); body.addColorStop(1, "#060c10");
-  g.fillStyle = body; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
-
-  const proj = (lat, lon) => {
+  // geographic point -> screen x, y and depth z (z > 0 faces the viewer)
+  const view = (cl, sl, lon) => {
     const a = lon - rot;
-    return [cx + R * Math.cos(lat) * Math.sin(a), cy - R * Math.sin(lat), Math.cos(lat) * Math.cos(a)];
+    const X = cl * Math.sin(a), Y = sl, Z = cl * Math.cos(a);
+    return [cx + R * X, cy - R * (Y * cT - Z * sT), Y * sT + Z * cT];
   };
-  g.lineWidth = 1; g.strokeStyle = "rgba(122,167,255,0.22)";
-  for (let lat = -60; lat <= 60; lat += 30) {
-    g.beginPath(); let pen = false;
-    for (let lon = 0; lon <= 360; lon += 4) {
-      const [x, y, z] = proj(lat * Math.PI / 180, lon * Math.PI / 180);
-      if (z > 0) { pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true; } else pen = false;
-    }
-    g.stroke();
-  }
-  for (let lon = 0; lon < 360; lon += 30) {
-    g.beginPath(); let pen = false;
-    for (let lat = -90; lat <= 90; lat += 4) {
-      const [x, y, z] = proj(lat * Math.PI / 180, lon * Math.PI / 180);
-      if (z > 0) { pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true; } else pen = false;
-    }
-    g.stroke();
-  }
+
+  // atmosphere, then the far half of the orbit ring, then the planet body
+  const atm = g.createRadialGradient(cx, cy, R * 0.95, cx, cy, R * 1.25);
+  atm.addColorStop(0, "rgba(95,211,224,0.18)"); atm.addColorStop(1, "rgba(95,211,224,0)");
+  g.fillStyle = atm; g.beginPath(); g.arc(cx, cy, R * 1.25, 0, Math.PI * 2); g.fill();
 
   const Rs = R * 1.15;
   const orbitPt = th => {
     const px = Math.cos(th), py = Math.sin(th) * Math.cos(INC), pz = Math.sin(th) * Math.sin(INC);
     return [cx + Rs * px, cy - Rs * py, pz];
   };
-  g.strokeStyle = "rgba(242,169,59,0.45)"; g.setLineDash([4, 5]); g.beginPath();
-  for (let j = 0; j <= 120; j++) { const [x, y] = orbitPt(j / 120 * Math.PI * 2); j ? g.lineTo(x, y) : g.moveTo(x, y); }
-  g.stroke(); g.setLineDash([]);
+  const ring = front => {
+    g.lineWidth = 1; g.setLineDash(front ? [] : [3, 5]);
+    g.strokeStyle = front ? "rgba(242,169,59,0.55)" : "rgba(242,169,59,0.2)";
+    g.beginPath();
+    let pen = false;
+    for (let j = 0; j <= 160; j++) {
+      const [x, y, z] = orbitPt(j / 160 * Math.PI * 2);
+      if ((z >= 0) === front) { pen ? g.lineTo(x, y) : g.moveTo(x, y); pen = true; } else pen = false;
+    }
+    g.stroke(); g.setLineDash([]);
+  };
+  ring(false);
 
-  const [ux, uy, uz] = proj(UAE.lat * Math.PI / 180, UAE.lon * Math.PI / 180);
-  if (uz > 0) {
-    g.fillStyle = C.amber; g.beginPath(); g.arc(ux, uy, 4, 0, Math.PI * 2); g.fill();
-    g.fillStyle = C.mute; g.font = "10px 'IBM Plex Mono', monospace"; g.fillText("UAE GS (SIM)", ux + 7, uy + 4);
+  const body = g.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.1, cx, cy, R);
+  body.addColorStop(0, "#102a35"); body.addColorStop(1, "#050a0e");
+  g.fillStyle = body; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = "rgba(95,211,224,0.22)"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke();
+
+  // land dots: bright on the day side, dim at night
+  const dotR = Math.max(1, R / 160);
+  for (const d of LAND_DOTS) {
+    const [x, y, z] = view(d.cl, d.sl, d.lon);
+    if (z <= 0.02) continue;
+    const lit = smooth(-0.12, 0.2, d.nx * sun.nx + d.ny * sun.ny + d.nz * sun.nz);   // 0 night .. 1 day
+    const a = (0.34 + 0.62 * lit) * (0.4 + 0.6 * z);
+    g.fillStyle = lit > 0.5 ? `rgba(150,222,232,${a})` : `rgba(122,166,204,${a})`;
+    g.beginPath(); g.arc(x, y, dotR * (0.7 + 0.5 * z), 0, Math.PI * 2); g.fill();
   }
 
+  ring(true);
+
+  // UAE ground station
+  const [ux, uy, uz] = view(Math.cos(UAE.lat), Math.sin(UAE.lat), UAE.lon);
+  if (uz > 0) {
+    g.strokeStyle = "rgba(242,169,59,0.5)"; g.lineWidth = 1;
+    g.beginPath(); g.arc(ux, uy, 9, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = C.amber; g.beginPath(); g.arc(ux, uy, 3.5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = C.mute; g.font = "11px 'IBM Plex Sans', system-ui, sans-serif"; g.fillText("UAE", ux + 13, uy + 4);
+  }
+
+  // satellite: takes the colour of the current alert level, hidden while behind the planet
   const th = (((Date.now() - modeStart) / 1000) * 0.045) % (Math.PI * 2);
   const [sx, sy, sz] = orbitPt(th);
   trail.push([sx, sy]); if (trail.length > 50) trail.shift();
-  g.strokeStyle = "rgba(228,236,241,0.35)"; g.lineWidth = 2; g.beginPath();
-  trail.forEach((p, j) => (j ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
-  g.stroke(); g.lineWidth = 1;
+  const hidden = sz < 0 && Math.hypot(sx - cx, sy - cy) < R;
+  if (!hidden) {
+    g.strokeStyle = "rgba(228,236,241,0.3)"; g.lineWidth = 2; g.beginPath();
+    trail.forEach((p, j) => (j ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])));
+    g.stroke(); g.lineWidth = 1;
 
-  const cur = series[series.length - 1];
-  const col = cur ? LEVEL_COLOR[cur.level] : C.ok;
-  const strength = cur ? Math.min(1, 0.3 + Math.max(cur.uv / 12, cur.dBAvg / 15, cur.flare / 100)) : 0.3;
-  const glow = g.createRadialGradient(sx, sy, 0, sx, sy, 24);
-  glow.addColorStop(0, col + "99"); glow.addColorStop(1, col + "00");
-  g.globalAlpha = 0.4 + 0.6 * strength;
-  g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, 24, 0, Math.PI * 2); g.fill();
-  g.globalAlpha = 1;
-  g.fillStyle = sz > 0 ? "#e4ecf1" : "#8a9ca8"; g.beginPath(); g.arc(sx, sy, 4, 0, Math.PI * 2); g.fill();
-  g.fillStyle = C.mute; g.font = "10px 'IBM Plex Mono', monospace"; g.fillText("SAT (SIM)", sx + 7, sy - 6);
+    const cur = series[series.length - 1];
+    const col = cur ? LEVEL_COLOR[cur.level] : C.ok;
+    const strength = cur ? Math.min(1, 0.3 + Math.max(cur.uv / 12, cur.dBAvg / 15, cur.flare / 100)) : 0.3;
+    const glow = g.createRadialGradient(sx, sy, 0, sx, sy, 24);
+    glow.addColorStop(0, col + "99"); glow.addColorStop(1, col + "00");
+    g.globalAlpha = 0.4 + 0.6 * strength;
+    g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, 24, 0, Math.PI * 2); g.fill();
+    g.globalAlpha = 1;
+    g.fillStyle = col; g.beginPath(); g.arc(sx, sy, 4.5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = C.mute; g.font = "11px 'IBM Plex Sans', system-ui, sans-serif"; g.fillText("SAT", sx + 9, sy - 7);
+  }
   requestAnimationFrame(drawGlobe);
 }
 
