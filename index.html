@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FalconEye Helios Shield</title>
+<meta name="description" content="Live dashboard for the FalconEye Helios Shield 1U CubeSat engineering model (ground-based prototype, not flown).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <div class="kicker">1U CubeSat engineering model · ground-based prototype, not flown</div>
+      <h1>FalconEye Helios Shield</h1>
+      <p class="mission">Measures UV and magnetic-field change, flags space-weather threats, and sends hazard alerts to ground control over LoRa. Gamma and flare inputs and the LoRa link are simulated.</p>
+    </div>
+    <div class="ctl">
+      <label for="mode" class="mute" style="font-size:11px">Source</label>
+      <select id="mode">
+        <option value="sim">Simulation</option>
+        <option value="live">Live feed</option>
+      </select>
+      <span id="simCtl" class="ctl-live">
+        <label for="scen" class="mute" style="font-size:11px">Event</label>
+        <select id="scen">
+          <option value="solar">Solar particle event</option>
+          <option value="magnetic">Magnetic storm</option>
+          <option value="uv">UV peak</option>
+        </select>
+      </span>
+      <span id="liveCtl" class="ctl-live" hidden>
+        <input type="text" id="feedUrl" class="feed-url" value="/api/telemetry" placeholder="Feed URL (JSON)" aria-label="Feed URL" spellcheck="false" autocomplete="off">
+        <label for="interval" class="mute" style="font-size:11px">every</label>
+        <input type="number" id="interval" class="interval" min="1" max="60" value="2" aria-label="Poll interval in seconds">
+        <span class="mute" style="font-size:11px">s</span>
+        <button id="connect" class="primary" type="button">Connect</button>
+        <button id="pasteBtn" type="button">Paste JSON</button>
+      </span>
+      <span class="badge sim" id="srcBadge">SIMULATED</span>
+    </div>
+  </header>
+
+  <section class="strip" id="banner" data-lvl="NORMAL" aria-live="polite">
+    <div class="status-text">
+      <span class="lvl" id="lvl">NORMAL</span>
+      <div>
+        <div id="bannerText">Environment within limits</div>
+        <div id="bannerSub">UV, magnetic field and threat inputs below warning levels.</div>
+      </div>
+    </div>
+    <div class="readouts">
+      <div class="ro"><div class="l">Data source</div><div class="v" id="feedState">SIM</div></div>
+      <div class="ro"><div class="l">Alerts</div><div class="v" id="alertN">0</div></div>
+      <div class="ro"><div class="l">LoRa packets sent</div><div class="v" id="loraN">0</div></div>
+      <div class="ro"><div class="l">Mission time</div><div class="v" id="met">T+ 00:00:00</div></div>
+      <div class="ro"><div class="l">Last update (UAE)</div><div class="v" id="pkt">–</div></div>
+    </div>
+  </section>
+
+  <main class="main">
+    <!-- Left: telemetry, threat inputs, channel status -->
+    <div class="col">
+      <section class="panel">
+        <h2>Payload telemetry <span class="badge sim" data-src>SIM</span></h2>
+        <div class="gauges">
+          <div class="gauge">
+            <svg id="gUV" viewBox="0 0 120 66" role="img" aria-label="UV index gauge"></svg>
+            <div class="gv" id="gUVv">–</div>
+            <div class="gl">UV index</div>
+          </div>
+          <div class="gauge">
+            <svg id="gMag" viewBox="0 0 120 66" role="img" aria-label="Magnetic field change gauge"></svg>
+            <div class="gv" id="gMagv">–</div>
+            <div class="gl">Field Δ µT</div>
+          </div>
+          <div class="gauge">
+            <svg id="gTemp" viewBox="0 0 120 66" role="img" aria-label="Node temperature gauge"></svg>
+            <div class="gv" id="gTempv">–</div>
+            <div class="gl">Node °C</div>
+          </div>
+        </div>
+        <p class="note" id="uvNote">–</p>
+        <p class="note" id="magNote">–</p>
+        <p class="note" id="tempNote">Housekeeping. Operating band 0 to 40 °C.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Threat inputs <span class="badge sim">SIMULATED</span></h2>
+        <dl class="kv" id="threatList"></dl>
+        <p class="note">Gamma and flare are simulated threat inputs, not payloads.</p>
+      </section>
+
+      <section class="panel grow">
+        <h2>Channel status</h2>
+        <dl class="kv" id="chanList"></dl>
+      </section>
+    </div>
+
+    <!-- Centre: mission control -->
+    <div class="col">
+      <section class="panel grow">
+        <h2>Mission control <span class="badge sim">ORBIT SIM</span></h2>
+        <div class="globe-wrap">
+          <canvas id="globe" role="img" aria-label="Simulated orbit around Earth with UAE ground station and status glow"></canvas>
+          <div class="globe-tag mono">Orbit simulated · UAE ground station (UTC+4)</div>
+          <div class="tl-over">
+            <div class="tl-lbl mono">Alert level, recent readings</div>
+            <div id="tl" aria-label="Alert level over time"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right: charts -->
+    <div class="col">
+      <section class="panel grow">
+        <h2>UV index <span class="badge sim" data-src>SIM</span></h2>
+        <div class="chart-box">
+          <svg id="uvChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="UV index over recent readings"></svg>
+        </div>
+        <p class="cap">WHO bands. WARNING at index 8.</p>
+      </section>
+      <section class="panel grow">
+        <h2>Magnetic field change, µT <span class="badge sim" data-src>SIM</span></h2>
+        <div class="chart-box">
+          <svg id="magChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Magnetic field change over recent readings"></svg>
+        </div>
+        <p class="cap">Dashed: WARNING 5 µT, ALERT 10 µT (placeholder thresholds).</p>
+      </section>
+    </div>
+  </main>
+
+  <div class="bottom">
+    <section class="panel">
+      <h2>Event log</h2>
+      <div class="logwrap">
+        <table class="log">
+          <thead><tr><th>Time (UAE)</th><th>Change</th><th>Reason</th></tr></thead>
+          <tbody id="logBody"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Ground control, LoRa <span class="badge warnb">SIMULATED LINK · NO RADIO</span></h2>
+      <pre class="term" id="gs">–</pre>
+      <p class="note" id="gsNote">–</p>
+    </section>
+  </div>
+
+  <footer>
+    <div><b>Alert rules:</b> UV WARNING at 8 or above. Field change WARNING above 5 µT, ALERT above 10 µT (5-point average, placeholder baseline 50 µT). Gamma threat WARNING above 26.5 CPM, ALERT above 30.7 CPM. Flare index WARNING at 50, ALERT at 80. Overall level is the highest channel level.</div>
+    <div><b>Sources:</b> payload values are labelled SIM unless the incoming packet says <span class="mono">"source": "LIVE"</span>. Gamma and flare are simulated threat inputs. The LoRa link and the orbit are simulated; no packet is transmitted. Units: UV index (WHO), µT, CPM, °C. Times UAE (UTC+4). Not reference-grade. 1U CubeSat engineering model, ground-based prototype, not flown.</div>
+  </footer>
+</div>
+
+<dialog id="pasteDlg">
+  <h3>Paste JSON readings</h3>
+  <p>One packet, an array of packets, or one packet per line. Keys: <span class="mono">uv_index, field_delta_uT, temp_C</span> (optional <span class="mono">gamma_cpm, flare_index, source, seq</span>). Packets without <span class="mono">"source": "LIVE"</span> are shown as SIM.</p>
+  <textarea id="pasteText" spellcheck="false" placeholder='{"source":"LIVE","uv_index":5.4,"field_delta_uT":2.1,"temp_C":26.8}'></textarea>
+  <div class="row">
+    <span class="msg" id="pasteMsg"></span>
+    <button id="pasteCancel" type="button">Close</button>
+    <button id="pasteApply" class="primary" type="button">Apply</button>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
