@@ -16,7 +16,7 @@
     <div>
       <div class="kicker">1U CubeSat engineering model · ground-based prototype, not flown</div>
       <h1>FalconEye Helios Shield</h1>
-      <p class="mission">Measures UV and magnetic-field change, flags space-weather threats, and sends hazard alerts to ground control over LoRa. Gamma and flare inputs and the LoRa link are simulated.</p>
+      <p class="mission">Measures UV and magnetic-field change, flags space-weather threats, and alerts ground control over LoRa.</p>
     </div>
     <div class="ctl">
       <label for="mode" class="mute" style="font-size:11px">Source</label>
@@ -55,16 +55,15 @@
     <div class="readouts">
       <div class="ro"><div class="l">Data source</div><div class="v" id="feedState">SIM</div></div>
       <div class="ro"><div class="l">Alerts</div><div class="v" id="alertN">0</div></div>
-      <div class="ro"><div class="l">LoRa packets sent</div><div class="v" id="loraN">0</div></div>
       <div class="ro"><div class="l">Mission time</div><div class="v" id="met">T+ 00:00:00</div></div>
       <div class="ro"><div class="l">Last update (UAE)</div><div class="v" id="pkt">–</div></div>
     </div>
   </section>
 
   <main class="main">
-    <!-- Left: telemetry, threat inputs, channel status -->
+    <!-- Left: telemetry, channels, event log -->
     <div class="col">
-      <section class="panel">
+      <section class="panel p-gauges">
         <h2>Payload telemetry <span class="badge sim" data-src>SIM</span></h2>
         <div class="gauges">
           <div class="gauge">
@@ -83,77 +82,70 @@
             <div class="gl">Node °C</div>
           </div>
         </div>
-        <p class="note" id="uvNote">–</p>
-        <p class="note" id="magNote">–</p>
-        <p class="note" id="tempNote">Housekeeping. Operating band 0 to 40 °C.</p>
       </section>
 
-      <section class="panel">
-        <h2>Threat inputs <span class="badge sim">SIMULATED</span></h2>
-        <dl class="kv" id="threatList"></dl>
-        <p class="note">Gamma and flare are simulated threat inputs, not payloads.</p>
+      <section class="panel p-chan">
+        <h2>Channels</h2>
+        <div class="chan" id="chanTable"></div>
       </section>
 
-      <section class="panel grow">
-        <h2>Channel status</h2>
-        <dl class="kv" id="chanList"></dl>
+      <section class="panel p-log grow">
+        <h2>Event log</h2>
+        <div class="logwrap">
+          <table class="log">
+            <thead><tr><th>Time (UAE)</th><th>Change</th><th>Reason</th></tr></thead>
+            <tbody id="logBody"></tbody>
+          </table>
+        </div>
       </section>
     </div>
 
-    <!-- Centre: mission control -->
+    <!-- Centre: mission control and ground link -->
     <div class="col">
-      <section class="panel grow">
+      <section class="panel p-globe grow">
         <h2>Mission control <span class="badge sim">ORBIT SIM</span></h2>
         <div class="globe-wrap">
           <canvas id="globe" role="img" aria-label="Simulated orbit around Earth with UAE ground station and status glow"></canvas>
-          <div class="globe-tag mono">Orbit simulated · UAE ground station (UTC+4)</div>
+          <div class="globe-tag mono">Orbit simulated · UAE ground station</div>
           <div class="tl-over">
             <div class="tl-lbl mono">Alert level, recent readings</div>
             <div id="tl" aria-label="Alert level over time"></div>
           </div>
         </div>
       </section>
+
+      <section class="panel p-lora">
+        <h2>Ground control, LoRa <span class="badge warnb">SIMULATED LINK · NO RADIO</span></h2>
+        <pre class="term" id="gs">–</pre>
+      </section>
     </div>
 
     <!-- Right: charts -->
     <div class="col">
-      <section class="panel grow">
+      <section class="panel p-uv grow">
         <h2>UV index <span class="badge sim" data-src>SIM</span></h2>
         <div class="chart-box">
           <svg id="uvChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="UV index over recent readings"></svg>
         </div>
-        <p class="cap">WHO bands. WARNING at index 8.</p>
       </section>
-      <section class="panel grow">
+      <section class="panel p-mag grow">
         <h2>Magnetic field change, µT <span class="badge sim" data-src>SIM</span></h2>
         <div class="chart-box">
           <svg id="magChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Magnetic field change over recent readings"></svg>
         </div>
-        <p class="cap">Dashed: WARNING 5 µT, ALERT 10 µT (placeholder thresholds).</p>
       </section>
     </div>
   </main>
 
-  <div class="bottom">
-    <section class="panel">
-      <h2>Event log</h2>
-      <div class="logwrap">
-        <table class="log">
-          <thead><tr><th>Time (UAE)</th><th>Change</th><th>Reason</th></tr></thead>
-          <tbody id="logBody"></tbody>
-        </table>
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Ground control, LoRa <span class="badge warnb">SIMULATED LINK · NO RADIO</span></h2>
-      <pre class="term" id="gs">–</pre>
-      <p class="note" id="gsNote">–</p>
-    </section>
-  </div>
-
   <footer>
-    <div><b>Alert rules:</b> UV WARNING at 8 or above. Field change WARNING above 5 µT, ALERT above 10 µT (5-point average, placeholder baseline 50 µT). Gamma threat WARNING above 26.5 CPM, ALERT above 30.7 CPM. Flare index WARNING at 50, ALERT at 80. Overall level is the highest channel level.</div>
-    <div><b>Sources:</b> payload values are labelled SIM unless the incoming packet says <span class="mono">"source": "LIVE"</span>. Gamma and flare are simulated threat inputs. The LoRa link and the orbit are simulated; no packet is transmitted. Units: UV index (WHO), µT, CPM, °C. Times UAE (UTC+4). Not reference-grade. 1U CubeSat engineering model, ground-based prototype, not flown.</div>
+    <span>1U CubeSat engineering model, ground-based prototype, not flown. Orbit, gamma and flare inputs, and the LoRa link are simulated; nothing is transmitted.</span>
+    <details>
+      <summary>Alert rules and sources</summary>
+      <div class="more">
+        <p><b>Alert rules:</b> UV WARNING at 8 or above. Field change WARNING above 5 µT, ALERT above 10 µT (5-point average, placeholder baseline 50 µT). Gamma threat WARNING above 26.5 CPM, ALERT above 30.7 CPM. Flare index WARNING at 50, ALERT at 80. Overall level is the highest channel level.</p>
+        <p><b>Sources:</b> payload values are labelled SIM unless the incoming packet says <span class="mono">"source": "LIVE"</span>. Gamma and flare are simulated threat inputs, not payloads. Units: UV index (WHO), µT, CPM, °C. Times UAE (UTC+4). Not reference-grade.</p>
+      </div>
+    </details>
   </footer>
 </div>
 

@@ -134,7 +134,7 @@ function reasonFor(chans, level) {
 
 function addLog(time, from, to, reason) {
   logRows.unshift({ time, from, to, reason });
-  logRows = logRows.slice(0, 6);
+  logRows = logRows.slice(0, 14);
 }
 
 /* One reading in, whatever its origin: update series, level, log, simulated LoRa, then draw. */
@@ -166,6 +166,19 @@ function process(s, src, missingPayload, t) {
   }
   if (ev.level === "NORMAL") lastSentLevel = "NORMAL";
   render(cur);
+}
+
+/* Fill the chart window with calm, simulated history so the charts are not empty at start.
+   Phase 140 to 199 of the event cycle is baseline for all three events. These points are SIM. */
+function prefillSim() {
+  const now = Date.now(), n = 60;
+  for (let i = 0; i < n; i++) {
+    const s = sample(140 + i);
+    series.push({ t: new Date(now - (n - i) * 1000), src: "SIM", missing: [], ...s });
+    const ev = evaluate(s);
+    Object.assign(series[series.length - 1], { level: ev.level, chans: ev.chans, cpmAvg: ev.cpmAvg, dBAvg: ev.dBAvg });
+  }
+  k = 0;
 }
 
 function simTick() { process(sample(k), "SIM", [], new Date()); }
@@ -216,7 +229,8 @@ function chart(svgId, get, o) {
   const el = document.getElementById(svgId);
   const W = el.clientWidth || 600, H = el.clientHeight || 170, L = 40, R = 10, T = 8, B = 20;
   el.setAttribute("viewBox", `0 0 ${W} ${H}`);
-  const x = j => L + (j / (N - 1)) * (W - L - R);
+  const span = Math.max(Math.min(series.length, N), 2);        // stretch until the window fills
+  const x = j => L + (j / (span - 1)) * (W - L - R);
   const y = v => T + (1 - (v - o.min) / (o.max - o.min)) * (H - T - B);
   let g = "";
   o.ticks.forEach(v => {
@@ -231,18 +245,18 @@ function chart(svgId, get, o) {
     g += `<line x1="${L}" x2="${W - R}" y1="${y(l.v)}" y2="${y(l.v)}" stroke="${l.color}" stroke-width="1.2" stroke-dasharray="5 4"/>`;
     g += `<text x="${W - R}" y="${y(l.v) - 4}" text-anchor="end" style="fill:${l.color}">${l.label}</text>`;
   });
-  const off = N - series.length;
+  const off = 0;
   let pts = "";
   series.forEach((p, j) => { pts += `${x(off + j).toFixed(1)},${y(get(p)).toFixed(1)} `; });
   let dot = "";
   if (series.length) {
     const last = series[series.length - 1];
-    dot = `<circle cx="${x(N - 1)}" cy="${y(get(last))}" r="4" fill="${o.color}"/>`;
+    dot = `<circle cx="${x(series.length - 1)}" cy="${y(get(last))}" r="4" fill="${o.color}"/>`;
   }
   g += `<polyline points="${pts}" fill="none" stroke="${o.color}" stroke-width="2" stroke-linejoin="round"/>${dot}`;
-  if (series.length > 1 && x(off) < W - R - 70) {      // skip the left label when it would crowd "now"
-    const span = Math.round((Date.now() - series[0].t) / 1000);
-    const lbl = span >= 90 ? "−" + Math.round(span / 60) + " min" : "−" + span + " s";
+  if (series.length > 1) {
+    const age = Math.round((Date.now() - series[0].t) / 1000);
+    const lbl = age >= 90 ? "−" + Math.round(age / 60) + " min" : "−" + age + " s";
     g += `<text x="${x(off)}" y="${H - 5}">${lbl}</text>`;
   }
   g += `<text x="${W - R}" y="${H - 5}" text-anchor="end">now</text>`;
@@ -381,15 +395,13 @@ function renderCommon() {
 
   $("tl").innerHTML = series.map(p => `<span class="${p.level}" title="${p.level}"></span>`).join("");
 
-  const gs = $("gs"), note = $("gsNote");
+  const gs = $("gs");
   if (!lastLora) {
-    gs.innerHTML = '<span class="dim">$ await event</span>\n<span class="ok">NORMAL</span>: nothing to send';
-    note.textContent = "Packets are sent only on WARNING or ALERT, and every 10 s while one is active.";
+    gs.innerHTML = '<span class="dim">$ await event</span>\n<span class="ok">NORMAL</span>: nothing to send. Packets go out on WARNING or ALERT, then every 10 s while active.';
   } else {
     const cls = lastLora.level === "ALERT" ? "al" : "wa";
-    const txt = JSON.stringify(lastLora, null, 2).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    gs.innerHTML = `<span class="dim">$ lora send --to ground-control --simulated</span>\n<span class="${cls}">${lastLora.level} · packet ${lastLora.seq} sent (simulated)</span>\n` + txt;
-    note.textContent = "Simulated LoRa link. The prototype has no radio, so nothing is transmitted.";
+    const txt = JSON.stringify(lastLora).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    gs.innerHTML = `<span class="${cls}">${lastLora.level} · packet ${lastLora.seq} sent (simulated, no radio)</span>\n<span class="dim">${txt}</span>`;
   }
 
   $("logBody").innerHTML = logRows.length
@@ -411,7 +423,6 @@ function render(cur) {
   $("bannerSub").textContent = heads[L][1] + (cur.missing.length
     ? " Missing from packet: " + cur.missing.join(", ") + " (carried forward, shown as SIM)." : "");
   $("alertN").textContent = alerts;
-  $("loraN").textContent = loraN;
   $("pkt").textContent = hms(cur.t);
 
   const live = cur.src === "LIVE";
@@ -421,9 +432,6 @@ function render(cur) {
   $("gUVv").textContent = cur.uv.toFixed(1);
   $("gMagv").textContent = cur.dBAvg.toFixed(1);
   $("gTempv").textContent = cur.temp.toFixed(1);
-  $("uvNote").textContent = `UV ${cur.uv.toFixed(1)}: ${cur.uv >= UV_WARN ? "at or above the WARNING level of 8" : "below the WARNING level of 8"}.`;
-  $("magNote").textContent = `Field change ${cur.dBAvg.toFixed(1)} µT (5-point average): ${cur.dBAvg > MAG_ALERT ? "above ALERT 10" : cur.dBAvg > MAG_WARN ? "above WARNING 5" : "within normal range"}.`;
-  $("tempNote").textContent = cur.temp >= 0 && cur.temp <= 40 ? "Housekeeping. Within the 0 to 40 °C band." : "Housekeeping. Outside the 0 to 40 °C band.";
 
   gauge("gUV", cur.uv, 0, 12, C.amber, [
     { f0: 0, f1: 3 / 12, color: C.ok }, { f0: 3 / 12, f1: 8 / 12, color: C.warn }, { f0: 8 / 12, f1: 1, color: C.alert }
@@ -433,23 +441,24 @@ function render(cur) {
   ]);
   gauge("gTemp", cur.temp, 0, 40, C.ok, [{ f0: 0, f1: 1, color: C.ok }]);
 
-  $("threatList").innerHTML = [
-    ["Gamma threat (CPM, 5-pt avg)", cur.cpmAvg.toFixed(0)],
-    ["Flare index (0 to 100)", cur.flare.toFixed(0)],
-    ["Gamma level", chanLabel(cur.chans.GAMMA)],
-    ["Flare level", chanLabel(cur.chans.FLARE)]
-  ].map(([a, b]) => `<dt>${a}</dt><dd class="mono">${b}</dd>`).join("");
-
-  $("chanList").innerHTML = [
-    ["UV channel", chanLabel(cur.chans.UV)],
-    ["Magnetometer channel", chanLabel(cur.chans.MAGNETIC)],
-    ["Gamma threat channel", chanLabel(cur.chans.GAMMA)],
-    ["Flare channel", chanLabel(cur.chans.FLARE)],
-    ["Ground link", "LoRa, simulated"]
-  ].map(([a, b]) => `<dt>${a}</dt><dd class="mono">${b}</dd>`).join("");
+  const inBand = cur.temp >= 0 && cur.temp <= 40;
+  renderChan([
+    ["UV index", "", cur.uv.toFixed(1), cur.chans.UV],
+    ["Field change", "", cur.dBAvg.toFixed(1) + " µT", cur.chans.MAGNETIC],
+    ["Gamma threat", "SIM", cur.cpmAvg.toFixed(0) + " CPM", cur.chans.GAMMA],
+    ["Flare index", "SIM", cur.flare.toFixed(0), cur.chans.FLARE],
+    ["Node temperature", "", cur.temp.toFixed(1) + " °C", inBand ? "NORMAL" : "WARNING", inBand ? "IN BAND" : "OUT OF BAND"]
+  ]);
 
   renderCommon();
   updateFeedState();
+}
+
+/* One compact table replaces the old threat-input and channel-status lists. */
+function renderChan(rows) {
+  $("chanTable").innerHTML = rows.map(([name, tag, val, lvl, label]) =>
+    `<div class="crow"><span class="n">${name}${tag ? `<small>${tag}</small>` : ""}</span><span class="v">${val}</span>` +
+    `<span class="l"><span class="tag ${lvl || "NONE"}">${lvl ? (label || chanLabel(lvl)) : "–"}</span></span></div>`).join("");
 }
 
 /* Live mode, before the first reading: show nothing instead of made-up numbers. */
@@ -459,21 +468,14 @@ function renderEmpty() {
   $("bannerText").textContent = "Waiting for live data";
   $("bannerSub").textContent = "Connect a feed URL or paste a JSON packet. No values are shown until a reading arrives.";
   $("alertN").textContent = "0";
-  $("loraN").textContent = "0";
   $("pkt").textContent = "–";
   setBadges("WAITING", "sim", "NO DATA YET");
   ["gUVv", "gMagv", "gTempv"].forEach(id => { $(id).textContent = "–"; });
-  $("uvNote").textContent = "–";
-  $("magNote").textContent = "–";
-  $("tempNote").textContent = "Housekeeping. Operating band 0 to 40 °C.";
   gauge("gUV", null, 0, 12, C.amber, []);
   gauge("gMag", null, 0, 15, C.rad, []);
   gauge("gTemp", null, 0, 40, C.ok, []);
-  const dash = ["Gamma threat (CPM, 5-pt avg)", "Flare index (0 to 100)", "Gamma level", "Flare level"];
-  $("threatList").innerHTML = dash.map(a => `<dt>${a}</dt><dd class="mono">–</dd>`).join("");
-  const chs = ["UV channel", "Magnetometer channel", "Gamma threat channel", "Flare channel"];
-  $("chanList").innerHTML = chs.map(a => `<dt>${a}</dt><dd class="mono">–</dd>`).join("")
-    + `<dt>Ground link</dt><dd class="mono">LoRa, simulated</dd>`;
+  renderChan([["UV index", "", "–", null], ["Field change", "", "–", null], ["Gamma threat", "SIM", "–", null],
+    ["Flare index", "SIM", "–", null], ["Node temperature", "", "–", null]]);
   renderCommon();
 }
 
@@ -535,6 +537,7 @@ function setMode(m, opts = {}) {
   $("liveCtl").hidden = m !== "live";
   if (m === "sim") {
     addLog(hms(new Date()), "–", "NORMAL", "Event started: " + EVENT_NAMES[scen]);
+    prefillSim();
     simTick();
     simTimer = setInterval(simTick, 1000);
   } else {
