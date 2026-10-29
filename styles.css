@@ -207,3 +207,10 @@ footer .more p:last-child { margin: 0; }
 .lv.NORMAL .dot { background: var(--ok); }
 .lv.WARNING { color: var(--warn); } .lv.WARNING .dot { background: var(--warn); }
 .lv.ALERT { color: var(--alert); } .lv.ALERT .dot { background: var(--alert); }
+
+/* ---- Timeline ---- */
+table.log td { padding: 6px 4px; }
+table.log td.t { color: var(--mute); width: 76px; }
+table.log .mute { color: var(--mute); }
+table.log .kind { font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); margin-right: 4px; }
+table.log .lv { font-size: 11px; }

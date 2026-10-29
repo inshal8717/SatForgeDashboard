@@ -133,8 +133,12 @@ function reasonFor(chans, level) {
 }
 
 function addLog(time, from, to, reason) {
-  logRows.unshift({ time, from, to, reason });
-  logRows = logRows.slice(0, 14);
+  logRows.unshift({ kind: "LEVEL", time, from, to, reason });
+  logRows = logRows.slice(0, 40);
+}
+function addLoraRow(time, p) {
+  logRows.unshift({ kind: "LORA", time, seq: p.seq, level: p.level, uv: p.uv, field: p.field_uT, cpm: p.gamma_cpm, flare: p.flare, src: p.data_source });
+  logRows = logRows.slice(0, 40);
 }
 
 /* One reading in, whatever its origin: update series, level, log, simulated LoRa, then draw. */
@@ -163,6 +167,7 @@ function process(s, src, missingPayload, t) {
       data_source: src
     };
     lastSentLevel = ev.level;
+    addLoraRow(hms(t), lastLora);
   }
   if (ev.level === "NORMAL") lastSentLevel = "NORMAL";
   render(cur);
@@ -415,7 +420,9 @@ function drawGlobe(now) {
     g.fillStyle = glow; g.beginPath(); g.arc(sx, sy, 24, 0, Math.PI * 2); g.fill();
     g.globalAlpha = 1;
     g.fillStyle = col; g.beginPath(); g.arc(sx, sy, 4.5, 0, Math.PI * 2); g.fill();
-    g.fillStyle = C.mute; g.font = "11px 'IBM Plex Sans', system-ui, sans-serif"; g.fillText("SAT", sx + 9, sy - 7);
+    g.fillStyle = C.mute; g.font = "11px 'IBM Plex Sans', system-ui, sans-serif";
+    const flip = sx > w - 44;
+    g.textAlign = flip ? "right" : "left"; g.fillText("SAT", flip ? sx - 9 : sx + 9, sy - 7); g.textAlign = "left";
   }
   requestAnimationFrame(drawGlobe);
 }
@@ -447,18 +454,7 @@ function renderCommon() {
 
   $("tl").innerHTML = series.map(p => `<span class="${p.level}" title="${p.level}"></span>`).join("");
 
-  const gs = $("gs");
-  if (!lastLora) {
-    gs.innerHTML = '<span class="dim">$ await event</span>\n<span class="ok">NORMAL</span>: nothing to send. Packets go out on WARNING or ALERT, then every 10 s while active.';
-  } else {
-    const cls = lastLora.level === "ALERT" ? "al" : "wa";
-    const txt = JSON.stringify(lastLora).replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    gs.innerHTML = `<span class="${cls}">${lastLora.level} · packet ${lastLora.seq} sent (simulated, no radio)</span>\n<span class="dim">${txt}</span>`;
-  }
-
-  $("logBody").innerHTML = logRows.length
-    ? logRows.map(r => `<tr><td class="t">${r.time}</td><td><span class="tag ${r.from}">${r.from}</span> → <span class="tag ${r.to}">${r.to}</span></td><td>${r.reason}</td></tr>`).join("")
-    : `<tr><td colspan="3" class="mute">No events yet.</td></tr>`;
+  $("logBody").innerHTML = logRows.length ? logRows.map(logRowHtml).join("") : `<tr><td class="mute">Nothing yet.</td></tr>`;
 }
 
 function render(cur) {
@@ -500,6 +496,15 @@ function render(cur) {
 
   renderCommon();
   updateFeedState();
+}
+
+/* Timeline rows: level changes, mode changes, and the simulated LoRa packets, newest first. */
+const levelChip = l => `<span class="lv ${l}"><i class="dot"></i>${l}</span>`;
+function logRowHtml(r) {
+  const body = r.kind === "LORA"
+    ? `<span class="kind">LoRa</span> packet ${r.seq} ${levelChip(r.level)} <span class="mute">UV ${r.uv} · Δ ${r.field} µT · γ ${r.cpm} · flare ${r.flare} · ${r.src}</span>`
+    : `${r.from === "–" ? "" : levelChip(r.from) + " → "}${levelChip(r.to)} <span class="mute">${r.reason}</span>`;
+  return `<tr><td class="t">${r.time}</td><td>${body}</td></tr>`;
 }
 
 /* One compact table replaces the old threat-input and channel-status lists. */
