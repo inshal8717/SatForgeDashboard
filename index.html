@@ -39,6 +39,7 @@
         <button id="connect" class="primary" type="button">Connect</button>
         <button id="pasteBtn" type="button">Paste JSON</button>
       </span>
+      <button id="csvBtn" type="button" title="Download this session's readings as a CSV file">Export CSV</button>
       <span class="badge sim" id="srcBadge">SIMULATED</span>
     </div>
   </header>
@@ -69,16 +70,19 @@
             <svg id="gUV" viewBox="0 0 120 66" role="img" aria-label="UV index gauge"></svg>
             <div class="gv" id="gUVv">–</div>
             <div class="gl">UV index</div>
+            <div class="gstat" id="gUVs" title="Minimum, average and maximum of the readings on the chart"></div>
           </div>
           <div class="gauge">
             <svg id="gMag" viewBox="0 0 120 66" role="img" aria-label="Magnetic field change gauge"></svg>
             <div class="gv" id="gMagv">–</div>
             <div class="gl">Field Δ µT</div>
+            <div class="gstat" id="gMags" title="Minimum, average and maximum of the readings on the chart"></div>
           </div>
           <div class="gauge">
             <svg id="gTemp" viewBox="0 0 120 66" role="img" aria-label="Node temperature gauge"></svg>
             <div class="gv" id="gTempv">–</div>
             <div class="gl">Node °C</div>
+            <div class="gstat" id="gTemps" title="Minimum, average and maximum of the readings on the chart"></div>
           </div>
         </div>
       </section>

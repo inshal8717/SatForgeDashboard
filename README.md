@@ -8,6 +8,7 @@ styles.css        theme
 app.js            dashboard logic: simulation, live feed, alert rules, drawing
 api/telemetry.js  Vercel function: POST a reading, GET the latest one
 data/             sample packet and a 40-line storm replay (tagged SIM)
+land.js           1-degree world land mask for the dot globe
 tools/send_sim.py sender: simulated readings, a replay file, or an Arduino on USB
 PRD.md            requirements and acceptance criteria
 ```
@@ -65,10 +66,17 @@ Serial.println("}");
 ```
 Use `"LIVE"` only for real sensors on the bench. For those, run `python3 tools/send_sim.py --url ... --serial COM3 --source LIVE` (needs `pip install pyserial`).
 
-## 3. Lock the endpoint (recommended)
+## 3. Using the dashboard
+- **Presentation mode:** press **P** (or open `?present=1`). Controls disappear and the numbers get bigger, which suits the demo video. Press P again to go back.
+- **Export CSV:** downloads every reading of this session (time, source SIM or LIVE, UV, field change, temperature, gamma, flare, level). Changing the event or the source starts a new session.
+- **Ground control timeline:** level changes, mode changes and the simulated LoRa packets in one list, newest first.
+- **Globe:** dot-matrix Earth with day and night from the real sun position. The orbit ring is decorative and the satellite dot takes the alert colour. Orbit, gamma and flare inputs and the LoRa link are simulated.
+- Under each gauge: minimum, average and maximum of the readings on the charts.
+
+## 4. Lock the endpoint (recommended)
 Without a key, anyone who knows the address can post readings. In Vercel: Project → Settings → Environment Variables, add `INGEST_KEY` with a long random value, then redeploy. Senders must then include the header `x-api-key: <value>` (`--key` in `send_sim.py`). Reading (GET) stays open so the dashboard can poll.
 
-## 4. Known limits
+## 5. Known limits
 - `/api/telemetry` keeps only the latest reading, in the function's memory. Fine for a single-user demo; serverless memory is not guaranteed to persist. If readings vanish, replace the `latest` variable with Vercel KV or Upstash Redis.
 - History on the charts lives in the browser tab and resets on reload.
 - Orbit globe, gamma and flare inputs, and the LoRa link are simulated and labelled as such. Nothing is transmitted over radio.

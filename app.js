@@ -35,6 +35,7 @@ let series = [], k = 0, prevLevel = "NORMAL", alerts = 0, loraN = 0, loraSeq = 0
 let lastLoraAtMs = 0, lastSentLevel = "NORMAL";
 let modeStart = Date.now();
 let simTimer = null, pollTimer = null, pollBusy = false;
+let history = [];                // every reading this session, for the CSV export
 const feed = { url: "", every: 2, lastPktAt: 0, lastKey: null, lastErr: "", count: 0, manual: false };
 
 /* ---- Simulation (per second, k counts from the start of the chosen event) ---- */
@@ -149,6 +150,8 @@ function process(s, src, missingPayload, t) {
   const ev = evaluate(s);
   const cur = series[series.length - 1];
   Object.assign(cur, { level: ev.level, chans: ev.chans, cpmAvg: ev.cpmAvg, dBAvg: ev.dBAvg });
+  history.push({ t, src, uv: s.uv, dB: s.dB, dBAvg: ev.dBAvg, temp: s.temp, cpm: s.cpm, flare: s.flare, level: ev.level });
+  if (history.length > 50000) history.shift();
 
   if (ev.level !== prevLevel) {
     if (ev.level === "ALERT") alerts++;
@@ -484,6 +487,9 @@ function render(cur) {
     { f0: 0, f1: MAG_WARN / 15, color: C.ok }, { f0: MAG_WARN / 15, f1: MAG_ALERT / 15, color: C.warn }, { f0: MAG_ALERT / 15, f1: 1, color: C.alert }
   ]);
   gauge("gTemp", cur.temp, 0, 40, C.ok, [{ f0: 0, f1: 1, color: C.ok }]);
+  fillStat("gUVs", series.map(p => p.uv), 1);
+  fillStat("gMags", series.map(p => p.dBAvg), 1);
+  fillStat("gTemps", series.map(p => p.temp), 1);
 
   const inBand = cur.temp >= 0 && cur.temp <= 40;
   renderChan([
@@ -502,9 +508,18 @@ function render(cur) {
 const levelChip = l => `<span class="lv ${l}"><i class="dot"></i>${l}</span>`;
 function logRowHtml(r) {
   const body = r.kind === "LORA"
-    ? `<span class="kind">LoRa</span> packet ${r.seq} ${levelChip(r.level)} <span class="mute">UV ${r.uv} · Δ ${r.field} µT · γ ${r.cpm} · flare ${r.flare} · ${r.src}</span>`
-    : `${r.from === "–" ? "" : levelChip(r.from) + " → "}${levelChip(r.to)} <span class="mute">${r.reason}</span>`;
+    ? `<span class="kind">LoRa</span> packet ${r.seq} ${levelChip(r.level)}<div class="sub">UV ${r.uv} · Δ ${r.field} µT · γ ${r.cpm} · flare ${r.flare} · ${r.src}</div>`
+    : `${r.from === "–" ? "" : levelChip(r.from) + " → "}${levelChip(r.to)}<div class="sub">${r.reason}</div>`;
   return `<tr><td class="t">${r.time}</td><td>${body}</td></tr>`;
+}
+
+/* Minimum, average and maximum of the readings currently on the charts. */
+function fillStat(id, values, digits) {
+  const el = $(id);
+  if (!values.length) { el.innerHTML = ""; return; }
+  const mn = Math.min(...values), mx = Math.max(...values), av = avg(values);
+  const cell = (l, v) => `<span><i>${l}</i><b>${v.toFixed(digits)}</b></span>`;
+  el.innerHTML = cell("min", mn) + cell("avg", av) + cell("max", mx);
 }
 
 /* One compact table replaces the old threat-input and channel-status lists. */
@@ -527,6 +542,7 @@ function renderEmpty() {
   gauge("gUV", null, 0, 12, C.amber, []);
   gauge("gMag", null, 0, 15, C.rad, []);
   gauge("gTemp", null, 0, 40, C.ok, []);
+  ["gUVs", "gMags", "gTemps"].forEach(id => { $(id).innerHTML = ""; });
   renderChan([["UV index", "", "–", null], ["Field change", "", "–", null], ["Gamma threat", "SIM", "–", null],
     ["Flare index", "SIM", "–", null], ["Node temperature", "", "–", null]]);
   renderCommon();
@@ -566,7 +582,7 @@ function updateFeedState() {
 /* ---- Modes ---- */
 function resetState() {
   series = []; k = 0; prevLevel = "NORMAL"; alerts = 0; loraN = 0; loraSeq = 0; lastLora = null;
-  lastLoraAtMs = 0; lastSentLevel = "NORMAL"; trail = []; logRows = [];
+  lastLoraAtMs = 0; lastSentLevel = "NORMAL"; trail = []; logRows = []; history = [];
   modeStart = Date.now();
   feed.lastKey = null; feed.lastPktAt = 0; feed.count = 0; feed.lastErr = ""; feed.manual = false;
 }
@@ -616,7 +632,36 @@ function parseLoose(text) {
   return out;
 }
 
+/* ---- CSV export of this session ---- */
+function exportCsv() {
+  const btn = $("csvBtn");
+  if (!history.length) {
+    btn.textContent = "No data yet";
+    setTimeout(() => { btn.textContent = "Export CSV"; }, 1500);
+    return;
+  }
+  const head = "time_utc,time_uae,source,uv_index,field_delta_uT,field_delta_5pt_avg_uT,temp_C,gamma_cpm,flare_index,level";
+  const rows = history.map(r => [
+    r.t.toISOString(), hms(r.t), r.src, r.uv.toFixed(2), r.dB.toFixed(2), r.dBAvg.toFixed(2),
+    r.temp.toFixed(1), r.cpm.toFixed(1), r.flare.toFixed(0), r.level
+  ].join(","));
+  const blob = new Blob([head + "\n" + rows.join("\n") + "\n"], { type: "text/csv" });
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[-:]/g, "").slice(0, 15);
+  a.href = URL.createObjectURL(blob);
+  a.download = `falconeye-session-${stamp}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
 /* ---- Events ---- */
+$("csvBtn").addEventListener("click", exportCsv);
+// Presentation mode: press P (or open ?present=1). Hides the controls and enlarges the numbers.
+document.addEventListener("keydown", e => {
+  if (e.key.toLowerCase() !== "p" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ""))) return;
+  document.body.classList.toggle("present");
+});
 $("mode").addEventListener("change", e => setMode(e.target.value));
 $("scen").addEventListener("change", e => { scen = e.target.value; setMode("sim"); });
 $("connect").addEventListener("click", () => setMode("live"));
@@ -650,6 +695,7 @@ $("pasteApply").addEventListener("click", () => {
   if (q.get("feed")) $("feedUrl").value = q.get("feed");
   if (q.get("interval")) $("interval").value = q.get("interval");
   if (EVENT_NAMES[q.get("event")]) scen = q.get("event");
+  if (q.get("present") === "1") document.body.classList.add("present");
   $("scen").value = scen;
   setMode(q.get("feed") || q.get("mode") === "live" ? "live" : "sim");
   setInterval(updateFeedState, 1000);

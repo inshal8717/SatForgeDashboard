@@ -214,3 +214,29 @@ table.log td.t { color: var(--mute); width: 76px; }
 table.log .mute { color: var(--mute); }
 table.log .kind { font: 500 10px "IBM Plex Mono", monospace; letter-spacing: .08em; text-transform: uppercase; color: var(--amber); margin-right: 4px; }
 table.log .lv { font-size: 11px; }
+
+/* ---- Gauge stats ---- */
+.gstat { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 6px; padding-top: 5px; border-top: 1px solid var(--line); }
+.gstat:empty { display: none; }
+.gstat span { display: flex; flex-direction: column; align-items: center; line-height: 1.25; min-width: 0; }
+.gstat i { font-style: normal; font-size: 10px; color: var(--mute); letter-spacing: .04em; }
+.gstat b { font: 500 12px "IBM Plex Sans", system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--fg); }
+table.log .sub { color: var(--mute); font-size: 12px; margin-top: 1px; }
+
+/* ---- Presentation mode (P key or ?present=1) ---- */
+.present .ctl > *:not(#srcBadge) { display: none !important; }
+.present footer details { display: none; }
+.present h1 { font-size: 26px; }
+.present .pill { font-size: 11px; }
+.present #bannerText { font-size: 19px; }
+.present .lvl { font-size: 18px; padding: 8px 14px; }
+.present .ro .v { font-size: 24px; }
+.present .ro .l, .present h2 { font-size: 12px; }
+.present .gauge .gv { font-size: 32px; }
+.present .gauge .gl { font-size: 12px; }
+.present .gstat b { font-size: 14px; }
+.present .crow { font-size: 15px; }
+.present .crow .v { font-size: 17px; }
+.present .lv { font-size: 12px; }
+.present table.log { font-size: 14px; }
+.present svg.chart text { font-size: 13px; }
