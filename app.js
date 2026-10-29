@@ -338,7 +338,7 @@ function drawGlobe(now) {
   const dpr = window.devicePixelRatio || 1;
   const w = gcv.clientWidth, h = gcv.clientHeight;
   if (!w || !h) return requestAnimationFrame(drawGlobe);
-  if (gcv.width !== Math.round(w * dpr)) { gcv.width = Math.round(w * dpr); gcv.height = Math.round(h * dpr); }
+  if (gcv.width !== Math.round(w * dpr) || gcv.height !== Math.round(h * dpr)) { gcv.width = Math.round(w * dpr); gcv.height = Math.round(h * dpr); }
   const g = gctx;
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
