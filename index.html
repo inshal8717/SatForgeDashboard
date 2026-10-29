@@ -13,10 +13,9 @@
 <body>
 <div class="app">
   <header class="top">
-    <div>
-      <div class="kicker">1U CubeSat engineering model · ground-based prototype, not flown</div>
+    <div class="titlebar">
       <h1>FalconEye Helios Shield</h1>
-      <p class="mission">Measures UV and magnetic-field change, flags space-weather threats, and alerts ground control over LoRa.</p>
+      <span class="pill" title="1U CubeSat engineering model, ground-based prototype, not flown">Engineering model · not flown</span>
     </div>
     <div class="ctl">
       <label for="mode" class="mute" style="font-size:11px">Source</label>
@@ -48,8 +47,8 @@
     <div class="status-text">
       <span class="lvl" id="lvl">NORMAL</span>
       <div>
-        <div id="bannerText">Environment within limits</div>
-        <div id="bannerSub">UV, magnetic field and threat inputs below warning levels.</div>
+        <div id="bannerText">All channels within limits</div>
+        <div id="bannerSub"></div>
       </div>
     </div>
     <div class="readouts">
@@ -64,7 +63,7 @@
     <!-- Left: telemetry, channels, event log -->
     <div class="col">
       <section class="panel p-gauges">
-        <h2>Payload telemetry <span class="badge sim" data-src>SIM</span></h2>
+        <h2>Payload telemetry</h2>
         <div class="gauges">
           <div class="gauge">
             <svg id="gUV" viewBox="0 0 120 66" role="img" aria-label="UV index gauge"></svg>
@@ -106,10 +105,8 @@
         <h2>Mission control <span class="badge sim">ORBIT SIM</span></h2>
         <div class="globe-wrap">
           <canvas id="globe" role="img" aria-label="Simulated orbit around Earth with UAE ground station and status glow"></canvas>
-          <div class="globe-tag mono">Orbit simulated · UAE ground station</div>
           <div class="tl-over">
-            <div class="tl-lbl mono">Alert level, recent readings</div>
-            <div id="tl" aria-label="Alert level over time"></div>
+            <div id="tl" title="Alert level over recent readings" aria-label="Alert level over recent readings"></div>
           </div>
         </div>
       </section>
@@ -123,13 +120,13 @@
     <!-- Right: charts -->
     <div class="col">
       <section class="panel p-uv grow">
-        <h2>UV index <span class="badge sim" data-src>SIM</span></h2>
+        <h2>UV index</h2>
         <div class="chart-box">
           <svg id="uvChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="UV index over recent readings"></svg>
         </div>
       </section>
       <section class="panel p-mag grow">
-        <h2>Magnetic field change, µT <span class="badge sim" data-src>SIM</span></h2>
+        <h2>Magnetic field change, µT</h2>
         <div class="chart-box">
           <svg id="magChart" class="chart" viewBox="0 0 600 170" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Magnetic field change over recent readings"></svg>
         </div>

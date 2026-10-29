@@ -424,7 +424,6 @@ function drawGlobe(now) {
 function chanLabel(v) { return v === "ALERT" ? "ALERT" : v === "WARNING" ? "WARNING" : "NORMAL"; }
 
 function setBadges(label, cls, headerText) {
-  document.querySelectorAll("[data-src]").forEach(el => { el.textContent = label; el.className = "badge " + cls; });
   const b = $("srcBadge");
   b.textContent = headerText;
   b.className = "badge " + (cls === "live" ? "live" : "sim");
@@ -441,7 +440,7 @@ function renderCommon() {
     lines: [{ v: UV_WARN, color: C.alert, label: "WARNING 8" }]
   });
   chart("magChart", p => p.dBAvg ?? p.dB, {
-    min: 0, max: 15, ticks: [0, 5, 10, 15], color: C.rad,
+    min: 0, max: 15, ticks: [0, 5, 10, 15], color: C.amber,
     bands: [{ lo: MAG_WARN, hi: MAG_ALERT, color: C.warn, alpha: 0.08 }, { lo: MAG_ALERT, hi: 15, color: C.alert, alpha: 0.08 }],
     lines: [{ v: MAG_WARN, color: C.warn, label: "WARNING 5" }, { v: MAG_ALERT, color: C.alert, label: "ALERT 10" }]
   });
@@ -467,14 +466,10 @@ function render(cur) {
   $("banner").dataset.lvl = L;
   $("lvl").textContent = L;
 
-  const heads = {
-    NORMAL: ["Environment within limits", "UV, magnetic field and threat inputs below warning levels."],
-    WARNING: ["Warning: a channel is above its warning level", "Alert not yet raised. Ground control is kept informed over LoRa (simulated)."],
-    ALERT: ["Alert: a channel is above its alert level", "Hazard alert sent to ground control over LoRa (simulated)."]
-  };
-  $("bannerText").textContent = heads[L][0];
-  $("bannerSub").textContent = heads[L][1] + (cur.missing.length
-    ? " Missing from packet: " + cur.missing.join(", ") + " (carried forward, shown as SIM)." : "");
+  const reason = reasonFor(cur.chans, L);
+  $("bannerText").textContent = L === "NORMAL" ? "All channels within limits" : reason.charAt(0).toUpperCase() + reason.slice(1);
+  $("bannerSub").textContent = cur.missing.length
+    ? "Missing from packet: " + cur.missing.join(", ") + " (carried forward, shown as SIM)." : "";
   $("alertN").textContent = alerts;
   $("pkt").textContent = hms(cur.t);
 
@@ -511,7 +506,7 @@ function render(cur) {
 function renderChan(rows) {
   $("chanTable").innerHTML = rows.map(([name, tag, val, lvl, label]) =>
     `<div class="crow"><span class="n">${name}${tag ? `<small>${tag}</small>` : ""}</span><span class="v">${val}</span>` +
-    `<span class="l"><span class="tag ${lvl || "NONE"}">${lvl ? (label || chanLabel(lvl)) : "–"}</span></span></div>`).join("");
+    `<span class="l"><span class="lv ${lvl || "NONE"}"><i class="dot"></i>${lvl ? (label || chanLabel(lvl)) : "–"}</span></span></div>`).join("");
 }
 
 /* Live mode, before the first reading: show nothing instead of made-up numbers. */
@@ -519,7 +514,7 @@ function renderEmpty() {
   $("banner").dataset.lvl = "NODATA";
   $("lvl").textContent = "NO DATA";
   $("bannerText").textContent = "Waiting for live data";
-  $("bannerSub").textContent = "Connect a feed URL or paste a JSON packet. No values are shown until a reading arrives.";
+  $("bannerSub").textContent = "Connect a feed URL or paste a JSON packet.";
   $("alertN").textContent = "0";
   $("pkt").textContent = "–";
   setBadges("WAITING", "sim", "NO DATA YET");
